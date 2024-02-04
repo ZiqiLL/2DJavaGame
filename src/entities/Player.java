@@ -3,7 +3,7 @@ package entities;
 import static utilz.Constants.Directions.*;
 import static utilz.Constants.PlayerConstants.GetSpriteAmount;
 import static utilz.Constants.PlayerConstants.*;
-import static utilz.HelpMethods.canMoveHere;
+import static utilz.HelpMethods.*;
 
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
@@ -27,11 +27,18 @@ import utilz.LoadSave;
     private int[][] lvlData;
     private float xDrawOffset = 21 * Game.SCALE;
     private float yDrawOffset = 4 * Game.SCALE;
+    
+    private boolean jump = false;
+    private float airSpeed = 0f;
+    private float gravity = 0.05f * Game.SCALE;
+    private float jumpSpeed = -3.25f * Game.SCALE;
+    private float fallSpeedAfterCollision = 0.5f * Game.SCALE;
+    private boolean inAir = false;
 
     public Player(float x, float y, int width, int height) {
         super(x, y, width, height);
         loadAnimations();
-        initHitBox(x, y, 20*Game.SCALE, 28*Game.SCALE);
+        initHitBox(x, y, 20*Game.SCALE, 27*Game.SCALE);
     }
     
     public void update() {
@@ -43,7 +50,6 @@ import utilz.LoadSave;
     public void render(Graphics g) {
         
         g.drawImage(animations[playerAction][aniIndex], (int)(hitBox.x - xDrawOffset), (int)(hitBox.y - yDrawOffset), width, height, null);
-        drawHitBox(g);
     }
     
     private void loadAnimations() {
@@ -59,34 +65,78 @@ import utilz.LoadSave;
     
     public void loadLvlData(int[][] lvlData) {
         this.lvlData = lvlData;
+        if(!isEntityOnTHeFloor(hitBox, lvlData)){
+            inAir = true;
+        }
     }
 
     
     private void updatePosition() {
         
         moving = false;
-        if(!left && !right && !up && !down)
+        if(jump)
+            jump();
+        if(!left && !right && !inAir)
             return;
         
-        float xSpeed = 0, ySpeed = 0;
+        float xSpeed = 0;
         
-        if(left && !right) {
-           xSpeed = -playerSpeed;
-        } else if(right && !left) {
-            xSpeed = playerSpeed;
+        if(left) {
+           xSpeed -= playerSpeed;
+        }
+        if(right) {
+            xSpeed += playerSpeed;
+        }
+        if(!inAir) {
+            if(!isEntityOnTHeFloor(hitBox, lvlData)) {
+                inAir = true;
+            }
         }
         
-        if(up && !down) {
-           ySpeed = -playerSpeed;
-        } else if(down && !up) {
-            ySpeed = playerSpeed;
+        if(inAir) { 
+            if(canMoveHere(hitBox.x, hitBox.y + airSpeed, hitBox.width, hitBox.height, lvlData)) {
+                hitBox.y += airSpeed;
+                airSpeed += gravity;
+                updateXPos(xSpeed);
+            }else {
+                hitBox.y = GetEntityYPosUnderRoofOrAboveFloor(hitBox, airSpeed);
+                if(airSpeed > 0) {
+                    resetInAir();
+                }else {
+                    airSpeed = fallSpeedAfterCollision;
+                }
+                updateXPos(xSpeed);
+            }
+            
+        }else {
+            updateXPos(xSpeed);
         }
-        if(canMoveHere(hitBox.x+xSpeed, hitBox.y+ySpeed, hitBox.width, hitBox.height, lvlData)) {
-            hitBox.y += ySpeed;
+        moving = true;
+    }
+
+    private void jump() {
+        if(inAir)
+            return;
+        inAir = true;
+        airSpeed = jumpSpeed;
+
+    }
+
+    private void resetInAir() {
+        inAir = false;
+        airSpeed = 0;
+        
+    }
+
+    private void updateXPos(float xSpeed) {
+        
+        if(canMoveHere(hitBox.x+xSpeed, hitBox.y, hitBox.width, hitBox.height, lvlData)) {
             hitBox.x += xSpeed;
             moving = true;
-            
+        } else {
+            hitBox.x = GetEntityXPosNextToWall(hitBox, xSpeed);
         }
+        
     }
 
     private void setAnimation() {
@@ -97,6 +147,15 @@ import utilz.LoadSave;
            playerAction = RUNNING;
        } else {
            playerAction = IDLE;
+       }
+       
+       if(inAir) {
+           if(airSpeed < 0) {
+               playerAction = JUMP;
+           }else {
+               playerAction = FALLING;
+           }
+               
        }
        
        if(attacking) {
@@ -168,6 +227,9 @@ import utilz.LoadSave;
 
     public void setDown(boolean down) {
         this.down = down;
+    }
+    public void setJump(boolean jump) {
+        this.jump = jump;
     }
 
 }
